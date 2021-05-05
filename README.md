@@ -33,7 +33,7 @@ layer = SirenLayer(
 ```python
 SirenNN = Siren(hidden_dim=512, output_dim=1, final_activation=sigmoid)
 params = SirenNN.init(random_key, sample_input)["params"]
-output = sirenNN.apply({"params": params}, sample_input)
+output = SirenNN.apply({"params": params}, sample_input)
 ```
 
 ### Approximate image on a grid
