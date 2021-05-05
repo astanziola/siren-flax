@@ -38,7 +38,7 @@ output = SirenNN.apply({"params": params}, sample_input)
 
 ### Approximate image on a grid
 
-This can be easily done using the built-in broadcasting features of `jax.numpy` functions. This repository provides an useful initialized `grid_init` to generate a coordinate grid that can be used as input.
+This can be easily done using the built-in broadcasting features of `jax.numpy` functions. This repository provides an useful initializer `grid_init` to generate a coordinate grid that can be used as input.
 ```python
 SirenDef = Siren(num_layers=5)
 
