@@ -1,4 +1,5 @@
 from flax import linen as nn
+from flax import nn as fnn
 import jax.numpy as jnp
 from jax.nn.initializers import uniform as uniform_init
 from jax import lax
@@ -12,14 +13,21 @@ Array = Any
 
 def siren_init(weight_std, dtype):
     def init_fun(key, shape, dtype=dtype):
-        return uniform(key, shape, dtype) * 2 * weight_std - weight_std
+        if dtype == jnp.dtype(jnp.array([1j])):
+            key1, key2 = jax.random.split(key)
+            dtype = jnp.dtype(jnp.array([1j]).real)
+            a = uniform(key1, shape, dtype) * 2 * weight_std - weight_std
+            b = uniform(key2, shape, dtype) * 2 * weight_std - weight_std
+            return a + 1j*b
+        else:
+            return uniform(key, shape, dtype) * 2 * weight_std - weight_std
 
     return init_fun
 
 
 def grid_init(grid_dimension, dtype):
     def init_fun(dtype=dtype):
-        coord_axis = [jnp.linspace(-1, 1, d) for d in grid_dimension]
+        coord_axis = [jnp.linspace(-3, 3, d) for d in grid_dimension]
         grid = jnp.stack(jnp.meshgrid(*coord_axis), -1)
         return jnp.asarray(grid, dtype)
 
@@ -73,7 +81,48 @@ class SirenLayer(nn.Module):
             bias = jnp.asarray(bias, self.dtype)
             y = y + bias
 
-        return Sine(self.w0, self.dtype)(y)
+        return self.act(self.w0 * y)
+
+
+class ModulatedLayer(nn.Module):
+    features: int = 32
+    is_first: bool = False
+    synthesis_act: Callable = jnp.sin
+    modulator_act: Callable = fnn.relu
+    precision: Any = None
+    dtype: Any = jnp.float32
+    w0_first_layer: float = 30.
+    w0: float = 1.0
+
+    @nn.compact
+    def __call__(
+        self, input: Array, latent: Array, hidden: Array
+    ) -> Tuple[Array, Array]:
+        # Get new modulation amplitude
+        modulator_dense = SirenLayer(
+            self.features, precision=self.precision, dtype=self.dtype, act=self.modulator_act
+        )
+        
+        synth_dense =  SirenLayer(
+            features=self.features,
+            w0=self.w0_first_layer if self.is_first else self.w0,
+            is_first=self.is_first,
+            act = self.synthesis_act,
+            dtype = self.dtype
+        )
+
+        if self.is_first:
+            # Prepare hidden state
+            hidden_state_init = nn.Dense(
+                self.features, precision=self.precision, dtype=self.dtype
+            )
+            hidden = hidden_state_init(latent)
+
+        # Build modulation signal and generate
+        mod_input = jnp.concatenate([hidden, latent])
+        alpha = modulator_dense(mod_input)
+        output = alpha * synth_dense(input)
+        return output, alpha
 
 
 class Siren(nn.Module):
@@ -81,7 +130,7 @@ class Siren(nn.Module):
     output_dim: int = 3
     num_layers: int = 5
     w0: float = 1.0
-    w0_first_layer: float = 30.0
+    w0_first_layer: float = 1.0
     use_bias: bool = True
     final_activation: Callable = lambda x: x  # Identity
     dtype: Any = jnp.float32
@@ -89,8 +138,7 @@ class Siren(nn.Module):
     @nn.compact
     def __call__(self, inputs: Array) -> Array:
         x = jnp.asarray(inputs, self.dtype)
-        input_dim = x.shape[-1]
-
+        
         for layernum in range(self.num_layers - 1):
             is_first = layernum == 0
 
@@ -110,4 +158,36 @@ class Siren(nn.Module):
             act=self.final_activation,
         )(x)
 
+        return x
+
+
+class ModulatedSiren(nn.Module):
+    hidden_dim: int = 256
+    output_dim: int = 3
+    num_layers: int = 5
+    synthesis_act: Callable = jnp.sin
+    modulator_act: Callable = fnn.relu
+    final_activation: Callable = lambda x: x
+    w0_first_layer: float = 30.
+    dtype: Any = jnp.float32
+
+    @nn.compact
+    def __call__(self, inputs: Array, latent: Array) -> Array:
+        x = jnp.asarray(inputs, self.dtype)
+        latent = jnp.asarray(latent, self.dtype)
+        hidden = None
+        for layernum in range(self.num_layers):
+            is_first = layernum == 0
+
+            x, hidden = ModulatedLayer(
+                features=self.hidden_dim,
+                is_first=is_first,
+                synthesis_act=self.synthesis_act,
+                modulator_act=self.modulator_act,
+                dtype=self.dtype,
+                w0_first_layer = self.w0_first_layer
+            )(x, latent, hidden)
+
+        # Last layer
+        x = nn.Dense(self.output_dim,dtype=self.dtype)(x)
         return x

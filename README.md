@@ -2,6 +2,9 @@
 
 Unofficial implementation of [SIREN neural networks](https://arxiv.org/pdf/2006.09661.pdf) in [Flax](https://flax.readthedocs.io/en/latest/index.html), using the [Linen Module system](https://github.com/google/flax/blob/master/flax/linen/README.md).
 
+This repo also includes [Modulated Periodic Activations for Generalizable Local Functional Representations](https://arxiv.org/abs/2104.03960v1).
+
+
 ## Examples
 
 An image fitting problem is provided in the [Example notebook](Example.ipynb)
@@ -47,6 +50,21 @@ params = SirenDef.init(key, grid)["params"]
 
 image = SirenDef.apply({"params": params}, grid)
 ```
+
+### Use Modulated SIREN
+```python
+SirenDef = ModulatedSiren(num_layers=5)
+
+grid = grid_init(grid_dimension, jnp.float32)()
+params = SirenDef.init(key, grid)["params"]
+
+image = SirenDef.apply({"params": params}, grid)
+```
+
+## References
+1. [Implicit Neural Representations with Periodic
+Activation Functions](https://arxiv.org/pdf/2006.09661.pdf)
+2. [Modulated Periodic Activations for Generalizable Local Functional Representations](https://arxiv.org/abs/2104.03960v1)
 
 ## Related works
 

@@ -2,6 +2,7 @@
 __pycache__/
 *.py[cod]
 *$py.class
+.vscode
 
 # Cat image
 dog-2556796_960_720.jpg
